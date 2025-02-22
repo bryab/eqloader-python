@@ -1,3 +1,5 @@
+mod fragments;
+mod util;
 mod wld;
 use crate::wld::S3DWld;
 use libeq_archive::EqArchive;

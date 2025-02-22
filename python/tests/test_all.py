@@ -17,4 +17,14 @@ def test_load_archive():
     print(wld)
     meshes = wld.meshes()
     assert len(meshes)
-    print(meshes)
+    #print(meshes)
+
+    mesh = meshes[0]
+
+    assert mesh.name
+    print(mesh.name)
+
+    x,y,z = mesh.vertices[0]
+    assert x
+    assert y
+    assert z

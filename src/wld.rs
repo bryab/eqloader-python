@@ -1,3 +1,4 @@
+use crate::fragments::S3DMesh;
 use libeq_archive::EqArchive;
 use libeq_wld::parser::{
     Actor, ActorDef, Fragment, FragmentType, HierarchicalSpriteDef, MaterialDef, WldDoc,
@@ -16,15 +17,13 @@ pub struct S3DWld {
 
 #[pymethods]
 impl S3DWld {
-    pub fn meshes(&self) -> PyResult<Vec<String>> {
+    pub fn meshes(&self) -> PyResult<Vec<S3DMesh>> {
         Ok(self
             .wld
             .iter()
             .enumerate()
             .filter_map(|(index, fragment)| match fragment.as_ref() {
-                FragmentType::DmSpriteDef2(f) => {
-                    Some(String::from(self.wld.get_string(f.name_reference)?))
-                }
+                FragmentType::DmSpriteDef2(_) => Some(S3DMesh::new(&self.wld, index as u32 + 1)),
                 _ => None,
             })
             .collect())
