@@ -28,3 +28,6 @@ def test_load_archive():
     assert x
     assert y
     assert z
+
+    assert len(mesh.uvs)
+    assert len(mesh.normals)

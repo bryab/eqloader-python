@@ -5,7 +5,7 @@ use libeq_wld::parser::{
 use pyo3::{prelude::*, types::PyTuple};
 use std::sync::Arc;
 extern crate owning_ref;
-use crate::util::wld_i16_pos_to_py;
+use crate::util::{u32_to_color, wld_f32_pos_to_gd, wld_i16_pos_to_py};
 
 use super::{create_fragment_ref, S3DFragment};
 use owning_ref::ArcRef;
@@ -84,9 +84,9 @@ impl S3DMesh {
     //     self.fragment.as_ref().max_distance
     // }
 
-    // fn center(&self) -> Vector3 {
-    //     wld_f32_pos_to_gd(&self.get_frag().center)
-    // }
+    fn center(&self) -> (f32, f32, f32) {
+        wld_f32_pos_to_gd(&self.get_frag().center)
+    }
 
     #[getter]
     pub fn vertices(&self) -> Vec<(f32, f32, f32)> {
@@ -98,29 +98,32 @@ impl S3DMesh {
             .collect()
     }
 
-    // fn normals(&self) -> PackedVector3Array {
-    //     self.get_frag()
-    //         .vertex_normals
-    //         .iter()
-    //         .map(|p| Vector3::new(p.0 as f32 / 127., p.2 as f32 / 127., p.1 as f32 / 127.))
-    //         .collect::<PackedVector3Array>()
-    // }
+    #[getter]
+    pub fn normals(&self) -> Vec<(f32, f32, f32)> {
+        self.get_frag()
+            .vertex_normals
+            .iter()
+            .map(|p| (p.0 as f32 / 127., p.2 as f32 / 127., p.1 as f32 / 127.))
+            .collect()
+    }
 
-    // fn vertex_colors(&self) -> PackedColorArray {
-    //     self.get_frag()
-    //         .vertex_colors
-    //         .iter()
-    //         .map(u32_to_color)
-    //         .collect::<PackedColorArray>()
-    // }
+    #[getter]
+    pub fn vertex_colors(&self) -> Vec<(f32, f32, f32, f32)> {
+        self.get_frag()
+            .vertex_colors
+            .iter()
+            .map(u32_to_color)
+            .collect()
+    }
 
-    // fn uvs(&self) -> PackedVector2Array {
-    //     self.get_frag()
-    //         .texture_coordinates
-    //         .iter()
-    //         .map(|p| Vector2::new(1.0 - p.0 as f32 / 256. * -1., 1.0 - p.1 as f32 / 256.))
-    //         .collect::<PackedVector2Array>()
-    // }
+    #[getter]
+    pub fn uvs(&self) -> Vec<(f32, f32)> {
+        self.get_frag()
+            .texture_coordinates
+            .iter()
+            .map(|p| (1.0 - p.0 as f32 / 256. * -1., 1.0 - p.1 as f32 / 256.))
+            .collect()
+    }
 
     // fn bone_indices(&self) -> PackedInt32Array {
     //     self.get_frag()
