@@ -10,3 +10,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 pyo3 = "0.23.3"
+libeq_wld = { git = "https://github.com/cjab/libeq.git", branch = "master" }
+libeq_archive = { git = "https://github.com/cjab/libeq.git", branch = "master" }
