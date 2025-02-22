@@ -11,3 +11,10 @@ def test_load_archive():
     assert 'boathouse1.bmp' in archive.get_filenames()
     print(len(archive.get_filenames()))
     assert len(archive.get_filenames()) >= 87
+
+    wld = archive.get_main_wld()
+    assert wld
+    print(wld)
+    meshes = wld.meshes()
+    assert len(meshes)
+    print(meshes)
