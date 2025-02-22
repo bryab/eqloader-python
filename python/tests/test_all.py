@@ -1,7 +1,6 @@
 import pytest
 from pathlib import Path
 import blender_eqloader
-
 fixtures_dir = Path(__file__).parent / 'fixtures'
 
 def test_load_archive():
@@ -12,10 +11,16 @@ def test_load_archive():
     print(len(archive.get_filenames()))
     assert len(archive.get_filenames()) >= 87
 
-    bmp_filename = next((f for f in archive.get_filenames() if f.endswith('.bmp')))
+    bmp_filename: str = next((f for f in archive.get_filenames() if f.endswith('.bmp')))
     image_bytes = archive.get_bytes(bmp_filename)
     assert len(image_bytes)
     assert isinstance(image_bytes, bytes)
+
+    # tmp_output = fixtures_dir / bmp_filename
+    # if tmp_output.exists():
+    #     tmp_output.unlink()
+    # with open(tmp_output, 'wb') as f:
+    #     f.write(image_bytes)
 
     wld = archive.get_main_wld()
     assert wld
