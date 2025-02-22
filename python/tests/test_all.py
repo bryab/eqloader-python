@@ -31,3 +31,10 @@ def test_load_archive():
 
     assert len(mesh.uvs)
     assert len(mesh.normals)
+
+    for mesh in meshes:
+        print(f"Mesh: {mesh.name} {mesh.center}")
+        for material_name, indices in mesh.face_material_groups.items():
+            print(f"Material: {material_name}. {len(indices)} indices")
+
+    assert False

@@ -79,5 +79,6 @@ impl S3DArchive {
 fn blender_eqloader(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<S3DArchive>()?;
     m.add_class::<S3DWld>()?;
+    //m.add_class::<S3DFace>()?;
     Ok(())
 }

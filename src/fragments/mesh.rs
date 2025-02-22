@@ -1,13 +1,10 @@
-use libeq_wld::parser::{
-    DmSprite, DmSpriteDef, DmSpriteDef2, DmTrackDef, DmTrackDef2, FragmentRef, FragmentType,
-    MaterialDef, WldDoc,
-};
-use pyo3::{prelude::*, types::PyTuple};
-use std::sync::Arc;
+use libeq_wld::parser::{DmSpriteDef2, DmTrackDef2, FragmentType, MaterialDef, WldDoc};
+use pyo3::prelude::*;
+use std::{collections::HashMap, sync::Arc};
 extern crate owning_ref;
 use crate::util::{u32_to_color, wld_f32_pos_to_gd, wld_i16_pos_to_py};
 
-use super::{create_fragment_ref, S3DFragment};
+use super::create_fragment_ref;
 use owning_ref::ArcRef;
 
 #[pyclass]
@@ -19,9 +16,6 @@ impl S3DMesh {
     pub fn new(wld: &Arc<WldDoc>, index: u32) -> Self {
         let fragment = wld.as_ref().at(index as usize - 1).unwrap();
         match fragment {
-            // FragmentType::DmSpriteDef(_) => Box::new(DmSpriteProvider {
-            //     fragment: create_fragment_ref(wld.clone(), index),
-            // }),
             FragmentType::DmSpriteDef2(_) => S3DMesh {
                 fragment: create_fragment_ref(wld.clone(), index),
             },
@@ -59,6 +53,12 @@ impl S3DMesh {
     }
 }
 
+// #[pyclass]
+// pub struct S3DFace {
+//     pub flags: u32,
+//     pub vertices: Vec<(f32, f32, f32)>,
+// }
+
 #[pymethods]
 impl S3DMesh {
     #[getter]
@@ -70,20 +70,25 @@ impl S3DMesh {
         ))
     }
 
-    // fn flags(&self) -> u32 {
-    //     self.fragment.as_ref().flags
-    // }
+    #[getter]
+    fn flags(&self) -> u32 {
+        self.fragment.as_ref().flags
+    }
 
-    // fn bounds(&self) -> Aabb {
-    //     let min = wld_f32_pos_to_gd(&self.fragment.as_ref().min);
-    //     let max = wld_f32_pos_to_gd(&self.fragment.as_ref().max);
-    //     Aabb::new(min, max-min).abs()
-    // }
+    #[getter]
+    fn bounds(&self) -> ((f32, f32, f32), (f32, f32, f32)) {
+        (
+            wld_f32_pos_to_gd(&self.fragment.as_ref().min),
+            wld_f32_pos_to_gd(&self.fragment.as_ref().max),
+        )
+    }
 
-    // fn bounds_radius(&self) -> f32 {
-    //     self.fragment.as_ref().max_distance
-    // }
+    #[getter]
+    fn bounds_radius(&self) -> f32 {
+        self.fragment.as_ref().max_distance
+    }
 
+    #[getter]
     fn center(&self) -> (f32, f32, f32) {
         wld_f32_pos_to_gd(&self.get_frag().center)
     }
@@ -125,12 +130,12 @@ impl S3DMesh {
             .collect()
     }
 
-    // fn bone_indices(&self) -> PackedInt32Array {
+    // fn bone_indices(&self) -> Vec<u32> {
     //     self.get_frag()
     //         .skin_assignment_groups
     //         .iter()
     //         .flat_map(|(num_verts, bone_idx)| {
-    //             vec![*bone_idx as i32, 0, 0, 0].repeat(*num_verts as usize)
+    //             vec![*bone_idx as u32, 0, 0, 0].repeat(*num_verts as usize)
     //         })
     //         .collect()
     // }
@@ -143,521 +148,51 @@ impl S3DMesh {
     //         .collect()
     // }
 
-    // fn face_material_groups(&self) -> Array<VariantArray> {
-    //     let wld = self.get_wld();
-    //     let materials = self.materials();
-    //     let mut pos = 0;
-    //     let frag = self.get_frag();
-    //     frag.face_material_groups
-    //         .iter()
-    //         .enumerate()
-    //         .filter_map(|(_, (poly_count, ref material_idx))| {
-    //             let material = materials[*material_idx as usize];
+    #[getter]
+    pub fn face_material_groups(&self) -> HashMap<String, Vec<u16>> {
+        let wld = self.get_wld();
+        let materials = self.materials();
+        let mut pos = 0;
+        let frag = self.get_frag();
+        frag.face_material_groups
+            .iter()
+            .enumerate()
+            .map(|(_, (poly_count, ref material_idx))| {
+                let material = materials[*material_idx as usize];
 
-    //             let count = *poly_count as usize;
-    //             let next_pos = pos + count;
-    //             let batch = pos..next_pos;
-    //             pos = next_pos;
+                let count = *poly_count as usize;
+                let next_pos = pos + count;
+                let batch = pos..next_pos;
+                pos = next_pos;
 
-    //             // If the material flags are 0, this is an invisible material.
-    //             // Since we are dealing with collision separately, we can simply omit these polygons as they serve no purpose for rendering.
-    //             // FIXME: It may be desirable to keep these for debugging purposes.  It would be wise to provide a flag for this.
-    //             // if material.render_method.as_u32() == 0 {
-    //             //     return None;
-    //             // }
+                // If the material flags are 0, this is an invisible material.
+                // Since we are dealing with collision separately, we can simply omit these polygons as they serve no purpose for rendering.
+                // FIXME: It may be desirable to keep these for debugging purposes.  It would be wise to provide a flag for this.
+                // if material.render_method.as_u32() == 0 {
+                //     return None;
+                // }
 
-    //             let indices: PackedInt32Array = frag
-    //                 .faces
-    //                 .get(batch)
-    //                 .expect("Tried to get a Face from a Mesh that does not exist!")
-    //                 .iter()
-    //                 .flat_map(|face| {
-    //                     vec![
-    //                         face.vertex_indexes.0 as i32,
-    //                         face.vertex_indexes.1 as i32,
-    //                         face.vertex_indexes.2 as i32,
-    //                     ]
-    //                 })
-    //                 .collect();
+                let indices: Vec<u16> = frag
+                    .faces
+                    .get(batch)
+                    .expect("Tried to get a Face from a Mesh that does not exist!")
+                    .iter()
+                    .flat_map(|face| {
+                        vec![
+                            face.vertex_indexes.0,
+                            face.vertex_indexes.1,
+                            face.vertex_indexes.2,
+                        ]
+                    })
+                    .collect();
 
-    //             let mut array = VariantArray::new();
-    //             array.push(&Variant::from(GString::from(
-    //                 wld.get_string(material.name_reference)
-    //                     .expect("Material name should be a valid string"),
-    //             )));
-    //             array.push(&Variant::from(indices));
-    //             return Some(array);
-    //         })
-    //         .collect()
-    // }
+                let material_name = String::from(
+                    wld.get_string(material.name_reference)
+                        .expect("Material name should be a valid string"),
+                );
 
-    // fn indices(&self) -> PackedInt32Array {
-    //     self.get_frag()
-    //         .faces
-    //         .iter()
-    //         .flat_map(|v| {
-    //             vec![
-    //                 v.vertex_indexes.0 as i32,
-    //                 v.vertex_indexes.1 as i32,
-    //                 v.vertex_indexes.2 as i32,
-    //             ]
-    //             .into_iter()
-    //         })
-    //         .collect()
-    // }
-
-    // fn collision_vertices(&self) -> PackedVector3Array {
-    //     let frag = self.get_frag();
-    //     let scale = 1.0 / (1 << frag.scale) as f32;
-    //     frag.faces
-    //         .iter()
-    //         .filter(|face| face.flags & 0x10 == 0)
-    //         .flat_map(|face| {
-    //             vec![
-    //                 wld_i16_pos_to_gd(&frag.positions[face.vertex_indexes.0 as usize], scale),
-    //                 wld_i16_pos_to_gd(&frag.positions[face.vertex_indexes.1 as usize], scale),
-    //                 wld_i16_pos_to_gd(&frag.positions[face.vertex_indexes.2 as usize], scale),
-    //             ]
-    //         })
-    //         .collect()
-    // }
-
-    // fn is_animated(&self) -> bool {
-    //     self.get_dmtrackdef().is_some()
-    // }
-
-    // fn animated_vertices(&self) -> Array<PackedVector3Array> {
-    //     let scale = 1.0 / (1 << self.get_frag().scale) as f32;
-    //     let dmtrackdef = match self.get_dmtrackdef() {
-    //         Some(fragment) => fragment,
-    //         None => return Array::new()
-    //     };
-    //     dmtrackdef.frames.iter().map(|frame| {
-    //         frame.iter().map(|p| wld_i16_pos_to_gd(p, scale)).collect::<PackedVector3Array>()
-
-    //     }).collect()
-    // }
-
-    // fn animation_speed(&self) -> f32 {
-    //     match self.get_dmtrackdef() {
-    //         Some(fragment) => fragment.param1 as f32 * 0.001,
-    //         None => return 0.
-    //     }
-    // }
-
-    // pub fn faces(&self) -> Array<VariantArray> {
-    //     let frag = self.get_frag();
-    //     let scale = 1.0 / (1 << frag.scale) as f32;
-    //     frag.faces
-    //         .iter()
-    //         .map(|face| {
-    //             let mut arr = VariantArray::new();
-    //             arr.push(Variant::from(face.flags));
-    //             arr.push(Variant::from(PackedVector3Array::from(&[
-    //                 wld_i16_pos_to_gd(&frag.positions[face.vertex_indexes.2 as usize], scale),
-    //                 wld_i16_pos_to_gd(&frag.positions[face.vertex_indexes.1 as usize], scale),
-    //                 wld_i16_pos_to_gd(&frag.positions[face.vertex_indexes.0 as usize], scale),
-    //             ])));
-    //             arr
-    //         })
-    //         .collect()
-    // }
-
-    // #[cfg(feature = "serde")]
-    // fn as_dict(&self) -> Dictionary {
-    //     let frag = self.get_frag();
-    //     let wld = self.get_wld();
-    //     frag_to_dict(wld, frag)
-    // }
+                return (material_name, indices);
+            })
+            .collect()
+    }
 }
-
-// struct DmSpriteProvider {
-//     fragment: ArcRef<WldDoc, DmSpriteDef>
-//  }
-
-//  impl MeshProvider for DmSpriteProvider {
-
-//     fn name(&self) -> GString {
-//         GString::from(
-//             self.get_wld()
-//                 .get_string(self.get_frag().name_reference)
-//                 .expect("Failed to get string from WLD!"),
-//         )
-//     }
-
-//      fn flags(&self) -> u32 {
-//          self.fragment.as_ref().flags
-//      }
-
-//      fn get_wld(&self) -> &Arc<WldDoc> {
-//         self.fragment
-//             .as_owner()
-//     }
-
-//     fn center(&self) -> Vector3 {
-//         wld_f32_pos_to_gd(&self.get_frag().center)
-//     }
-
-//     fn bounds(&self) -> Aabb {
-//         // FIXME: IF this is part of this fragment, is it unknown
-//         Aabb::new(Vector3::ZERO, Vector3::ZERO)
-//     }
-
-//     fn bounds_radius(&self) -> f32 {
-//         // FIXME: IF this is part of this fragment, is it unknown
-//         0.
-//     }
-
-//     fn vertices(&self) -> PackedVector3Array {
-//         self.get_frag().vertices.iter().map(|p| wld_f32_pos_to_gd(p)).collect()
-//     }
-
-//     fn normals(&self) -> PackedVector3Array {
-//         self.get_frag()
-//             .vertex_normals
-//             .iter()
-//             .map(|p| Vector3::new(p.0, p.2, p.1))
-//             .collect::<PackedVector3Array>()
-//     }
-
-//     fn vertex_colors(&self) -> PackedColorArray {
-//         self.get_frag()
-//             .vertex_colors
-//             .iter()
-//             .map(u32_to_color)
-//             .collect::<PackedColorArray>()
-//     }
-
-//     fn uvs(&self) -> PackedVector2Array {
-//         self.get_frag()
-//             .texture_coordinates
-//             .iter()
-//             .map(|p| Vector2::new(1.0 - p.0 * -1., 1.0 - p.1))
-//             .collect::<PackedVector2Array>()
-//     }
-
-//     fn bone_indices(&self) -> PackedInt32Array {
-//         self.get_frag()
-//             .skin_assignment_groups
-//             .iter()
-//             .flat_map(|(num_verts, bone_idx)| {
-//                 vec![*bone_idx as i32, 0, 0, 0].repeat(*num_verts as usize)
-//             })
-//             .collect()
-//     }
-
-//     fn bone_weights(&self) -> PackedFloat32Array {
-//         self.get_frag()
-//             .skin_assignment_groups
-//             .iter()
-//             .flat_map(|(num_verts, _bone_idx)| vec![1., 0., 0., 0.].repeat(*num_verts as usize))
-//             .collect()
-//     }
-
-//     fn face_material_groups(&self) -> Array<VariantArray> {
-//         let wld = self.get_wld();
-//         let materials = self.materials();
-//         let mut pos = 0;
-//         let frag = self.get_frag();
-//         match &frag.face_material_groups {
-//             Some(face_material_groups) => {
-//                 face_material_groups
-//             .iter()
-//             .enumerate()
-//             .filter_map(|(_, (poly_count, ref material_idx))| {
-//                 let material = materials[*material_idx as usize];
-
-//                 let count = *poly_count as usize;
-//                 let next_pos = pos + count;
-//                 let batch = pos..next_pos;
-//                 pos = next_pos;
-
-//                 // If the material flags are 0, this is an invisible material.
-//                 // Since we are dealing with collision separately, we can simply omit these polygons as they serve no purpose for rendering.
-//                 // FIXME: It may be desirable to keep these for debugging purposes.  It would be wise to provide a flag for this.
-//                 // if material.render_method.as_u32() == 0 {
-//                 //     return None;
-//                 // }
-
-//                 let indices: PackedInt32Array = frag
-//                     .faces
-//                     .get(batch)
-//                     .expect("Tried to get a Face from a Mesh that does not exist!")
-//                     .iter()
-//                     .flat_map(|face| {
-//                         vec![
-//                             face.vertex_indexes.0 as i32,
-//                             face.vertex_indexes.1 as i32,
-//                             face.vertex_indexes.2 as i32,
-//                         ]
-//                     })
-//                     .collect();
-
-//                 let mut array = VariantArray::new();
-//                 array.push(&Variant::from(GString::from(
-//                     wld.get_string(material.name_reference)
-//                         .expect("Material name should be a valid string"),
-//                 )));
-//                 array.push(&Variant::from(indices));
-//                 return Some(array);
-//             })
-//             .collect()
-//             }
-//             None => Array::new()
-//         }
-//     }
-
-//     fn indices(&self) -> PackedInt32Array {
-//         self.get_frag()
-//             .faces
-//             .iter()
-//             .flat_map(|v| {
-//                 vec![
-//                     v.vertex_indexes.0 as i32,
-//                     v.vertex_indexes.1 as i32,
-//                     v.vertex_indexes.2 as i32,
-//                 ]
-//                 .into_iter()
-//             })
-//             .collect()
-//     }
-
-//     fn collision_vertices(&self) -> PackedVector3Array {
-//         let frag = self.get_frag();
-//         frag.faces
-//             .iter()
-//             .filter(|face| face.flags & 0x10 == 0)
-//             .flat_map(|face| {
-//                 vec![
-//                     wld_f32_pos_to_gd(&frag.vertices[face.vertex_indexes.0 as usize]),
-//                     wld_f32_pos_to_gd(&frag.vertices[face.vertex_indexes.1 as usize]),
-//                     wld_f32_pos_to_gd(&frag.vertices[face.vertex_indexes.2 as usize]),
-//                 ]
-//             })
-//             .collect()
-//     }
-
-//     fn is_animated(&self) -> bool {
-//         self.get_dmtrackdef().is_some()
-//     }
-
-//     fn animated_vertices(&self) -> Array<PackedVector3Array> {
-//         let dmtrackdef = match self.get_dmtrackdef() {
-//             Some(fragment) => fragment,
-//             None => return Array::new()
-//         };
-//         dmtrackdef.frames.iter().map(|frame| {
-//             frame.iter().map(|p| wld_f32_pos_to_gd(p)).collect::<PackedVector3Array>()
-
-//         }).collect()
-//     }
-
-//     fn animation_speed(&self) -> f32 {
-//         match self.get_dmtrackdef() {
-//             Some(fragment) => fragment.sleep as f32 * 0.001,
-//             None => 0.
-//         }
-//     }
-
-//     #[cfg(feature = "serde")]
-//     fn as_dict(&self) -> Dictionary {
-//         let frag = self.get_frag();
-//         let wld = self.get_wld();
-//         frag_to_dict(wld, frag)
-//     }
-//  }
-
-//  impl DmSpriteProvider {
-//     fn get_frag(&self) -> &DmSpriteDef {
-//         self.fragment
-//             .as_ref()
-//     }
-
-//     fn materials(&self) -> Vec<&MaterialDef> {
-//         let wld = self.get_wld();
-//         wld.get(&self.get_frag().material_list_ref)
-//             .expect("Invalid material list reference")
-//             .fragments
-//             .iter()
-//             .map(|fragment_ref| {
-//                 wld.get(fragment_ref)
-//                     .expect("Material should exist - it's in the material list")
-//             })
-//             .collect()
-//     }
-
-//     fn get_dmtrackdef(&self) -> Option<&DmTrackDef> {
-//         // Below was an experiment, but does not work in the only case I know of where a DMTRACK exists (gequip/IT4)
-//         // In that case, the vertex animations are not referenced but rather that fragment is named in the manner
-//         // of TRACKs.  Since this is so obscure I am just going to disable this.
-
-//         None
-
-//         // let wld = self.get_wld();
-//         // let frag = self.get_frag();
-//         // let fragment_index = frag.fragment3;
-//         // if fragment_index <= 0 {
-//         //     return None;
-//         // }
-//         // let dmtrack = wld.at(fragment_index as usize - 1).unwrap();
-//         // let dmtrack = match dmtrack {
-//         //     FragmentType::DmTrack(fragment) => fragment,
-//         //     _ => {
-//         //         godot_error!("DMSPRITEDEF fragment3 is not DMTRACK");
-//         //         return None;
-//         //     }
-//         // };
-//         // // FIXME: dmtrack.reference should be for DMTRACKDEF not DMTRACKDEF2 (fix in eqwld after testing)
-//         // match dmtrack.reference {
-//         //     FragmentRef::Index(index, _) => {
-//         //         let fragment = wld.at(index as usize - 1).unwrap();
-//         //         match fragment {
-//         //             FragmentType::DmTrackDef(fragment) => Some(fragment),
-//         //             _ => None,
-//         //         }
-//         //     }
-//         //     FragmentRef::Name(_, _) => None,
-//         // }
-//     }
-
-// }
-
-// #[godot_api]
-// impl S3DMesh {
-
-//     #[func]
-//     pub fn name(&self) -> GString {
-//         self.get_provider().name()
-//     }
-
-//     #[func]
-//     pub fn flags(&self) -> u32 {
-//         self.get_provider().flags()
-//     }
-
-//     #[func]
-//     pub fn center(&self) -> Vector3 {
-//         self.get_provider().center()
-//     }
-
-//     /// Return a AABB representing the bounding box of the mesh
-//     #[func]
-//     pub fn bounds(&self) -> Aabb {
-//         self.get_provider().bounds()
-//     }
-
-//     // Return the maximum distance from center of all vertices in the mesh
-//     #[func]
-//     pub fn bounds_radius(&self) -> f32 {
-//         self.get_provider().bounds_radius()
-//     }
-
-//     /// Returns the vertex positions of the mesh, converted into Godot format.
-//     #[func]
-//     pub fn vertices(&self) -> PackedVector3Array {
-//         self.get_provider().vertices()
-//     }
-
-//     /// Returns the vertex normals of the mesh, converted into Godot format.
-//     #[func]
-//     pub fn normals(&self) -> PackedVector3Array {
-//         self.get_provider().normals()
-//     }
-
-//     /// Returns the vertex colors of the mesh (if present), converted into Godot format.
-//     /// Note that for re-usable actors such as trees, the vertex colors are not part of the mesh definition, but instead part of the object definition.
-//     #[func]
-//     pub fn vertex_colors(&self) -> PackedColorArray {
-//         self.get_provider().vertex_colors()
-//     }
-
-//     /// Returns the UV coordinates of the mesh, converted into Godot format.
-//     #[func]
-//     pub fn uvs(&self) -> PackedVector2Array {
-//         self.get_provider().uvs()
-//     }
-
-//     /// Returns skin assignment groups, converted into Godot format.
-//     /// The Godot format requires that there are 4 bone indices per vertex, but we only use the first of the four.
-//     #[func]
-//     pub fn bone_indices(&self) -> PackedInt32Array {
-//         self.get_provider().bone_indices()
-//     }
-
-//     /// Returns a bone weights array that matches the `bone_indices` array.
-//     /// The Godot format requires that there are 4 bone indices per vertex, but we only use the first of the four.
-//     #[func]
-//     pub fn bone_weights(&self) -> PackedFloat32Array {
-//         self.get_provider().bone_weights()
-//     }
-
-//     /// Returns an array of material groups.
-//     /// Material groups are two-tuples.  The first element is the name of the material.
-//     /// The second element is the array of indices for the polygons that use this material.
-//     ///
-//     /// Invisible materials are skipped entirely.
-//     #[func]
-//     pub fn face_material_groups(&self) -> Array<VariantArray> {
-//         self.get_provider().face_material_groups()
-//     }
-
-//     /// Get all the indices that form polygons of the mesh.
-//     /// NOTE: This should not normally be used if you wish to actually apply materials to surfaces.
-//     /// To do so, you must get the indices of each material group, and add each material group as a separate surface.
-//     #[func]
-//     pub fn indices(&self) -> PackedInt32Array {
-//         self.get_provider().indices()
-//     }
-
-//     /// Construct an array of Vector3s that represent the concave collision mesh for this mesh
-//     #[func]
-//     pub fn collision_vertices(&self) -> PackedVector3Array {
-//         self.get_provider().collision_vertices()
-//     }
-
-//     /// Return true if this mesh has vertex animations
-//     #[func]
-//     pub fn is_animated(&self) -> bool {
-//         self.get_provider().is_animated()
-//     }
-
-//     /// Construct an array of Vector3s that represent a sequence of vertices if this mesh has vertex animations
-//     #[func]
-//     pub fn animated_vertices(&self) -> Array<PackedVector3Array> {
-//         self.get_provider().animated_vertices()
-//     }
-
-//     /// Return the delay in seconds between each frame in the vertex animation sequence
-//     #[func]
-//     pub fn animation_speed(&self) -> f32 {
-//         self.get_provider().animation_speed()
-//     }
-
-//     #[cfg(feature = "serde")]
-//     #[func]
-//     pub fn as_dict(&self) -> Dictionary {
-//         self.get_provider().as_dict()
-//     }
-// }
-
-// impl S3DMesh {
-
-//     fn get_provider(&self) -> &Box<dyn MeshProvider> {
-//         self.provider.as_ref().unwrap()
-//     }
-
-//     pub fn from_reference(wld: &Arc<WldDoc>, mesh_reference: &DmSprite) -> Option<Gd<Self>> {
-//         match mesh_reference.reference {
-//             FragmentRef::Index(index, _) => {
-//                 let fragment = wld.at(index as usize - 1).unwrap();
-//                 match fragment {
-//                     FragmentType::DmSpriteDef2(_) => Some(gd_from_frag_type::<S3DMesh>(wld, index)),
-//                     FragmentType::DmSpriteDef(_) => Some(gd_from_frag_type::<S3DMesh>(wld, index)),
-//                     _ => None,
-//                 }
-//             }
-//             FragmentRef::Name(_, _) => None,
-//         }
-//     }
-
-// }

@@ -1,5 +1,5 @@
 mod mesh;
-use libeq_wld::parser::{Fragment, FragmentType, WldDoc};
+use libeq_wld::parser::{Fragment, WldDoc};
 pub use mesh::*;
 use owning_ref::ArcRef;
 use std::sync::Arc;
@@ -14,5 +14,3 @@ fn create_fragment_ref<T: 'static + Fragment>(wld: Arc<WldDoc>, index: u32) -> A
             .expect(format!("Fragment at index {index} is not of the requested type!").as_str())
     })
 }
-
-pub trait S3DFragment {}
