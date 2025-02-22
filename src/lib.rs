@@ -33,8 +33,12 @@ impl S3DArchive {
         Ok(self.archive.iter().map(|(s, _)| String::from(s)).collect())
     }
 
+    pub fn get_bytes(&mut self, filename: &str) -> PyResult<Vec<u8>> {
+        self._get(&filename)
+    }
+
     pub fn get_wld(&self, filename: &str) -> PyResult<S3DWld> {
-        self._get_wld(filename.to_string().as_str())
+        self._get_wld(&filename)
     }
 
     /// Returns the main WLD inside the S3D file.
@@ -69,8 +73,7 @@ impl S3DArchive {
 
     /// Returns an EQWld object representing a WLD file
     fn _get_wld(&self, filename: &str) -> PyResult<S3DWld> {
-        let data = self._get(filename)?;
-        S3DWld::new(data)
+        S3DWld::new(self._get(filename)?)
     }
 }
 

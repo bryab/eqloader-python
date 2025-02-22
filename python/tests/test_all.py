@@ -12,6 +12,13 @@ def test_load_archive():
     print(len(archive.get_filenames()))
     assert len(archive.get_filenames()) >= 87
 
+
+    for filename in archive.get_filenames():
+        if filename.endswith('.bmp'):
+            image_bytes = archive.get_bytes(filename)
+            assert len(image_bytes)
+            assert isinstance(image_bytes, bytes)
+
     wld = archive.get_main_wld()
     assert wld
     print(wld)
@@ -36,5 +43,3 @@ def test_load_archive():
         print(f"Mesh: {mesh.name} {mesh.center}")
         for material_name, indices in mesh.face_material_groups.items():
             print(f"Material: {material_name}. {len(indices)} indices")
-
-    assert False
