@@ -3,7 +3,7 @@ requires = ["maturin>=1.8,<2.0"]
 build-backend = "maturin"
 
 [project]
-name = "blender-eqloader"
+name = "eqloader"
 requires-python = ">=3.8"
 classifiers = [
     "Programming Language :: Rust",
@@ -12,9 +12,12 @@ classifiers = [
 ]
 dynamic = ["version"]
 [project.optional-dependencies]
-tests = [
+dev = [
     "pytest",
+    "fake-bpy-module",
+    "maturin"
 ]
+blender-dev = ['fake-bpy-module']
 [tool.maturin]
 python-source = "python"
 features = ["pyo3/extension-module"]

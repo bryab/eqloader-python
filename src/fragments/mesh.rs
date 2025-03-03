@@ -1,10 +1,15 @@
-use libeq_wld::parser::{DmSpriteDef2, DmTrackDef2, FragmentType, MaterialDef, WldDoc};
-use pyo3::prelude::*;
-use std::{collections::HashMap, sync::Arc};
+use libeq_wld::parser::{
+    DmSprite, DmSpriteDef2, DmTrackDef2, FragmentRef, FragmentType, MaterialDef, WldDoc,
+};
+use pyo3::{
+    exceptions::{PyTypeError, PyValueError},
+    prelude::*,
+};
+use std::sync::Arc;
 extern crate owning_ref;
 use crate::util::{u32_to_color, wld_f32_pos_to_gd, wld_i16_pos_to_py};
 
-use super::create_fragment_ref;
+use super::{create_fragment_ref, S3DFragment};
 use owning_ref::ArcRef;
 
 #[pyclass]
@@ -12,15 +17,11 @@ pub struct S3DMesh {
     fragment: ArcRef<WldDoc, DmSpriteDef2>,
 }
 
-impl S3DMesh {
-    pub fn new(wld: &Arc<WldDoc>, index: u32) -> Self {
-        let fragment = wld.as_ref().at(index as usize - 1).unwrap();
-        match fragment {
-            FragmentType::DmSpriteDef2(_) => S3DMesh {
-                fragment: create_fragment_ref(wld.clone(), index),
-            },
-            _ => panic!("S3DMesh trying to wrap a non-mesh fragment!"),
-        }
+impl S3DFragment for S3DMesh {
+    fn new(wld: &Arc<WldDoc>, index: u32) -> PyResult<Self> {
+        Ok(S3DMesh {
+            fragment: create_fragment_ref(wld.clone(), index)?,
+        })
     }
 }
 
@@ -51,13 +52,41 @@ impl S3DMesh {
         let fragment = wld.get(&self.get_frag().animation_ref)?;
         wld.get(&fragment.reference)
     }
+
+    pub fn from_reference(wld: &Arc<WldDoc>, mesh_reference: &DmSprite) -> PyResult<Self> {
+        match mesh_reference.reference {
+            FragmentRef::Index(index, _) => {
+                let fragment = wld.at(index as usize - 1).ok_or_else(|| {
+                    PyValueError::new_err(format!("Invalid fragment index: {index}"))
+                })?;
+                match fragment {
+                    FragmentType::DmSpriteDef2(_) => S3DMesh::new(&wld, index),
+                    _ => Err(PyValueError::new_err("Invalid fragment for this class")),
+                }
+            }
+            FragmentRef::Name(_, _) => Err(PyValueError::new_err("Name references not supported")),
+        }
+    }
 }
 
-// #[pyclass]
-// pub struct S3DFace {
-//     pub flags: u32,
-//     pub vertices: Vec<(f32, f32, f32)>,
-// }
+#[pyclass]
+pub struct S3DFace {
+    flags: u16,
+    indices: (u16, u16, u16),
+}
+
+#[pymethods]
+impl S3DFace {
+    #[getter]
+    pub fn indices(&self) -> (u16, u16, u16) {
+        self.indices
+    }
+
+    #[getter]
+    pub fn flags(&self) -> u16 {
+        self.flags
+    }
+}
 
 #[pymethods]
 impl S3DMesh {
@@ -126,7 +155,7 @@ impl S3DMesh {
         self.get_frag()
             .texture_coordinates
             .iter()
-            .map(|p| (1.0 - p.0 as f32 / 256. * -1., 1.0 - p.1 as f32 / 256.))
+            .map(|v| ((v.0 as f32) / 256.0, (v.1 as f32) / 256.0))
             .collect()
     }
 
@@ -147,51 +176,42 @@ impl S3DMesh {
     //         .flat_map(|(num_verts, _bone_idx)| vec![1., 0., 0., 0.].repeat(*num_verts as usize))
     //         .collect()
     // }
-
     #[getter]
-    pub fn face_material_groups(&self) -> HashMap<String, Vec<u16>> {
+    pub fn faces(&self) -> Vec<S3DFace> {
+        let frag = self.get_frag();
+        frag.faces
+            .iter()
+            .map(|face| S3DFace {
+                flags: face.flags,
+                indices: (
+                    face.vertex_indexes.2,
+                    face.vertex_indexes.1,
+                    face.vertex_indexes.0,
+                ),
+            })
+            .collect()
+    }
+
+    /// The first element of the tuple is the number of faces that use the same material. All
+    /// polygon entries are sorted by material index so that faces use the same material are
+    /// grouped together.
+    ///
+    /// The second element of the tuple is the name of the material.
+    #[getter]
+    pub fn face_material_groups(&self) -> Vec<(u16, String)> {
         let wld = self.get_wld();
         let materials = self.materials();
-        let mut pos = 0;
         let frag = self.get_frag();
         frag.face_material_groups
             .iter()
             .enumerate()
             .map(|(_, (poly_count, ref material_idx))| {
                 let material = materials[*material_idx as usize];
-
-                let count = *poly_count as usize;
-                let next_pos = pos + count;
-                let batch = pos..next_pos;
-                pos = next_pos;
-
-                // If the material flags are 0, this is an invisible material.
-                // Since we are dealing with collision separately, we can simply omit these polygons as they serve no purpose for rendering.
-                // FIXME: It may be desirable to keep these for debugging purposes.  It would be wise to provide a flag for this.
-                // if material.render_method.as_u32() == 0 {
-                //     return None;
-                // }
-
-                let indices: Vec<u16> = frag
-                    .faces
-                    .get(batch)
-                    .expect("Tried to get a Face from a Mesh that does not exist!")
-                    .iter()
-                    .flat_map(|face| {
-                        vec![
-                            face.vertex_indexes.0,
-                            face.vertex_indexes.1,
-                            face.vertex_indexes.2,
-                        ]
-                    })
-                    .collect();
-
                 let material_name = String::from(
                     wld.get_string(material.name_reference)
                         .expect("Material name should be a valid string"),
                 );
-
-                return (material_name, indices);
+                (*poly_count, material_name)
             })
             .collect()
     }
